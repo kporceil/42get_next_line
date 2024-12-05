@@ -12,6 +12,7 @@
 
 #include "get_next_line.h"
 #include <stddef.h>
+#include <string.h>
 #include <unistd.h>
 
 #ifndef BUFFER_SIZE
@@ -35,12 +36,8 @@ char	*get_next_line(int fd)
 	if (err)
 		return (NULL);
 	err = set_line(fd, &line);
-	if (err)
-	{
-		free(line);
-		return (NULL);
-	}
-	err = set_leftover(&leftover, line);
+	if (!err)
+		err = set_leftover(&leftover, line);
 	if (err)
 	{
 		free(line);
@@ -48,7 +45,10 @@ char	*get_next_line(int fd)
 	}
 	err = resize_line(&line);
 	if (err && leftover)
+	{
 		free(leftover);
+		leftover = NULL;
+	}
 	return (line);
 }
 
@@ -57,11 +57,9 @@ t_err	add_leftover(char *leftover, char **line)
 	size_t	i;
 	size_t	len;
 
+	*line = NULL;
 	if (!leftover)
-	{
-		*line = NULL;
 		return (NO_ERR);
-	}
 	len = ft_strlen(leftover);
 	*line = malloc(sizeof(char) * (len + 1));
 	if (!(*line))
@@ -155,8 +153,8 @@ t_err	resize_line(char **line)
 	}
 	free(*line);
 	*line = newline;
-	if (!newline)
+	if (!(*line))
 		return (MALLOC_ERR);
-	newline[i] = '\0';
+	(*line)[i] = '\0';
 	return (NO_ERR);
 }

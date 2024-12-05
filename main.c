@@ -26,6 +26,7 @@ int	main(void)
 	while (line)
 	{
 		printf("%s", line);
+		fflush(stdout);
 		free(line);
 		line = get_next_line(fd);
 	}
