@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "get_next_line.h"
+#include "get_next_line_bonus.h"
 #include <stddef.h>
 #include <string.h>
 #include <unistd.h>
@@ -19,36 +19,40 @@
 # define BUFFER_SIZE 4096
 #endif
 
+#ifndef OPEN_MAX
+# define OPEN_MAX 1024
+#endif
+
 t_err	add_leftover(char *leftover, char **line);
 t_err	set_line(int fd, char **line, t_err err);
-t_err	set_leftover(char **leftover, char *line);
+t_err	set_leftover(char **leftover, char *line, int fd);
 t_err	resize_line(char **line);
 
 char	*get_next_line(int fd)
 {
 	t_err		err;
 	char		*line;
-	static char	*leftover = NULL;
+	static char	*leftover[OPEN_MAX] = {NULL};
 
 	line = NULL;
 	err = NO_ERR;
-	line = ft_strjoin(leftover, line, &err);
-	leftover = NULL;
+	line = ft_strjoin(leftover[fd], line, &err);
+	leftover[fd] = NULL;
 	if (err)
 		return (NULL);
 	err = set_line(fd, &line, err);
 	if (!err)
-		err = set_leftover(&leftover, line);
+		err = set_leftover(leftover, line, fd);
 	if (err)
 	{
 		free(line);
 		return (NULL);
 	}
 	err = resize_line(&line);
-	if (err && leftover)
+	if (err && leftover[fd])
 	{
-		free(leftover);
-		leftover = NULL;
+		free(leftover[fd]);
+		leftover[fd] = NULL;
 	}
 	return (line);
 }
@@ -103,7 +107,7 @@ t_err	set_line(int fd, char **line, t_err err)
 	return (NO_ERR);
 }
 
-t_err	set_leftover(char **leftover, char *line)
+t_err	set_leftover(char **leftover, char *line, int fd)
 {
 	size_t	len;
 	size_t	i;
@@ -119,16 +123,16 @@ t_err	set_leftover(char **leftover, char *line)
 		++i;
 	if (i == len)
 		return (NO_ERR);
-	*leftover = malloc(sizeof(char) * (len - i + 1));
-	if (!(*leftover))
+	leftover[fd] = malloc(sizeof(char) * (len - i + 1));
+	if (!(leftover[fd]))
 		return (MALLOC_ERR);
 	j = 0;
 	while (i + j < len)
 	{
-		(*leftover)[j] = line[i + j];
+		leftover[fd][j] = line[i + j];
 		++j;
 	}
-	(*leftover)[j] = '\0';
+	leftover[fd][j] = '\0';
 	return (NO_ERR);
 }
 
