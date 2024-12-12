@@ -1,165 +1,158 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   get_next_line.c                                    :+:      :+:    :+:   */
+/*   get_next_line_bonus.c                              :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: kporceil <kporceil@student.42lyon.fr>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2024/12/04 13:05:28 by kporceil          #+#    #+#             */
-/*   Updated: 2024/12/04 13:05:45 by kporceil         ###   ########lyon.fr   */
+/*   Created: 2024/12/10 14:36:56 by kporceil          #+#    #+#             */
+/*   Updated: 2024/12/11 14:11:53 by kporceil         ###   ########lyon.fr   */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "get_next_line_bonus.h"
-#include <stddef.h>
-#include <string.h>
-#include <unistd.h>
+#include <stdbool.h>
 
-#ifndef BUFFER_SIZE
-# define BUFFER_SIZE 4096
-#endif
-
-#ifndef OPEN_MAX
-# define OPEN_MAX 1024
-#endif
-
-t_err	add_leftover(char *leftover, char **line);
-t_err	set_line(int fd, char **line, t_err err);
-t_err	set_leftover(char **leftover, char *line, int fd);
-t_err	resize_line(char **line);
+t_err		join_lst(t_buffer **lst, char **line);
+t_buffer	*set_leftover(t_buffer *node);
+t_err		fd_search(int fd, t_fd **lst, t_fd **node);
+void		*buffer_clear(t_fd **lst, int fd);
 
 char	*get_next_line(int fd)
 {
+	static t_fd	*fd_lst = NULL;
+	t_fd		*current_fd;
 	t_err		err;
 	char		*line;
-	static char	*leftover[OPEN_MAX] = {NULL};
 
-	line = NULL;
 	err = NO_ERR;
-	line = ft_strjoin(leftover[fd], line, &err);
-	leftover[fd] = NULL;
-	if (err)
-		return (NULL);
-	err = set_line(fd, &line, err);
+	err = fd_search(fd, &fd_lst, &current_fd);
 	if (!err)
-		err = set_leftover(leftover, line, fd);
-	if (err)
-	{
-		free(line);
-		return (NULL);
-	}
-	err = resize_line(&line);
-	if (err && leftover[fd])
-	{
-		free(leftover[fd]);
-		leftover[fd] = NULL;
-	}
+		while (is_line_complete(current_fd->buffer_lst) == false && !err)
+			err = lst_add(fd, &current_fd->buffer_lst);
+	if (err == READ_ERR)
+		return (buffer_clear(&fd_lst, fd));
+	else if (err == MALLOC_ERR)
+		return (lst_clear(&fd_lst));
+	err = join_lst(&current_fd->buffer_lst, &line);
+	if (err == MALLOC_ERR)
+		return (lst_clear(&fd_lst));
+	else if (err == LINE_ERR)
+		return (buffer_clear(&fd_lst, fd));
+	remove_unused_fd(&fd_lst);
 	return (line);
 }
 
-t_err	add_leftover(char *leftover, char **line)
+t_err	join_lst(t_buffer **lst, char **line)
 {
-	size_t	i;
-	size_t	len;
+	t_buffer	*node;
+	ssize_t		len;
+	ssize_t		i;
+	ssize_t		j;
 
-	*line = NULL;
-	if (!leftover)
-		return (NO_ERR);
-	len = ft_strlen(leftover);
+	node = *lst;
+	len = ft_calc_len(node);
+	if (!len)
+		return (LINE_ERR);
 	*line = malloc(sizeof(char) * (len + 1));
 	if (!(*line))
 		return (MALLOC_ERR);
 	i = 0;
-	while (leftover[i])
+	while (node)
 	{
-		(*line)[i] = leftover[i];
-		++i;
+		j = 0;
+		while (j < node->bytes_read && node->buffer[j] != '\n' && i < len)
+			(*line)[i++] = node->buffer[j++];
+		if (j < node->bytes_read && node->buffer[j] == '\n')
+			(*line)[i++] = node->buffer[j];
+		node = node->next;
 	}
 	(*line)[i] = '\0';
+	*lst = set_leftover(*lst);
 	return (NO_ERR);
 }
 
-t_err	set_line(int fd, char **line, t_err err)
+t_buffer	*set_leftover(t_buffer *node)
 {
-	char	*buffer;
-	ssize_t	read_size;
+	ssize_t		i;
+	ssize_t		j;
+	t_buffer	*tmp;
 
-	read_size = 0;
-	buffer = malloc(sizeof(char) * BUFFER_SIZE + 1UL);
-	if (!buffer)
-		return (MALLOC_ERR);
-	while (is_line_complete(*line) == false)
+	while (node && node->next)
 	{
-		read_size = read(fd, buffer, BUFFER_SIZE);
-		if (read_size < 1)
-			break ;
-		buffer[read_size] = '\0';
-		*line = ft_strjoin(*line, buffer, &err);
-		if (err)
-		{
-			free(buffer);
-			return (err);
-		}
+		tmp = node;
+		node = node->next;
+		free(tmp);
 	}
-	free(buffer);
-	if (read_size < 0)
-		return (READ_ERR);
-	return (NO_ERR);
-}
-
-t_err	set_leftover(char **leftover, char *line, int fd)
-{
-	size_t	len;
-	size_t	i;
-	size_t	j;
-
-	len = 0;
-	while (line && line[len])
-		++len;
 	i = 0;
-	while (i < len && line[i] != '\n')
+	while (i < node->bytes_read && node->buffer[i] != '\n')
 		++i;
-	if (i < len && line[i] == '\n')
-		++i;
-	if (i == len)
-		return (NO_ERR);
-	leftover[fd] = malloc(sizeof(char) * (len - i + 1));
-	if (!(leftover[fd]))
-		return (MALLOC_ERR);
+	++i;
 	j = 0;
-	while (i + j < len)
+	while (i < node->bytes_read)
+		node->buffer[j++] = node->buffer[i++];
+	node->bytes_read = j;
+	if (node->bytes_read == 0)
 	{
-		leftover[fd][j] = line[i + j];
-		++j;
+		free(node);
+		return (NULL);
 	}
-	leftover[fd][j] = '\0';
+	return (node);
+}
+
+t_err	fd_search(int fd, t_fd **lst, t_fd **node)
+{
+	t_fd	*new;
+	t_fd	*tmp;
+
+	tmp = *lst;
+	while (tmp)
+	{
+		*node = tmp;
+		if (!tmp->next || tmp->fd == fd)
+			break ;
+		tmp = tmp->next;
+	}
+	if (tmp && tmp->fd == fd)
+		return (NO_ERR);
+	new = malloc(sizeof(t_fd));
+	if (!new)
+		return (MALLOC_ERR);
+	new->fd = fd;
+	new->next = NULL;
+	new->buffer_lst = NULL;
+	*node = new;
+	if (*lst)
+		tmp->next = new;
+	else
+		*lst = new;
 	return (NO_ERR);
 }
 
-t_err	resize_line(char **line)
+void	*buffer_clear(t_fd **lst, int fd)
 {
-	size_t	len;
-	size_t	i;
-	char	*newline;
+	t_fd		*fd_tmp;
+	t_fd		*fd_tmp2;
+	t_buffer	*buffer_tmp;
+	t_buffer	*buffer_tmp2;
 
-	len = 0;
-	while (*line && (*line)[len] && (*line)[len] != '\n')
-		++len;
-	if (*line && (*line)[len] == '\n')
-		++len;
-	if (!len)
-		return (NO_ERR);
-	newline = malloc(sizeof(char) * (len + 1));
-	i = 0;
-	while (newline && i < len)
+	fd_tmp = *lst;
+	while (fd_tmp->fd != fd)
 	{
-		newline[i] = (*line)[i];
-		++i;
+		fd_tmp2 = fd_tmp;
+		fd_tmp = fd_tmp->next;
 	}
-	free(*line);
-	*line = newline;
-	if (!(*line))
-		return (MALLOC_ERR);
-	(*line)[i] = '\0';
-	return (NO_ERR);
+	buffer_tmp = fd_tmp->buffer_lst;
+	while (buffer_tmp)
+	{
+		buffer_tmp2 = buffer_tmp;
+		buffer_tmp = buffer_tmp->next;
+		free(buffer_tmp2);
+	}
+	if (fd_tmp == *lst)
+		*lst = fd_tmp->next;
+	else
+		fd_tmp2->next = fd_tmp->next;
+	free(fd_tmp);
+	return (NULL);
 }

@@ -5,8 +5,8 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: kporceil <kporceil@student.42lyon.fr>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2024/12/04 14:07:46 by kporceil          #+#    #+#             */
-/*   Updated: 2024/12/04 14:27:58 by kporceil         ###   ########lyon.fr   */
+/*   Created: 2024/12/10 14:37:38 by kporceil          #+#    #+#             */
+/*   Updated: 2024/12/10 16:25:27 by kporceil         ###   ########lyon.fr   */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,18 +16,31 @@
 # include <stdbool.h>
 # include <stddef.h>
 # include <stdlib.h>
+# include <unistd.h>
+
+# ifndef BUFFER_SIZE
+#  define BUFFER_SIZE 4096
+# endif
+
+typedef struct s_buffer
+{
+	char			buffer[BUFFER_SIZE];
+	ssize_t			bytes_read;
+	struct s_buffer	*next;
+}					t_buffer;
 
 typedef enum e_err
 {
 	NO_ERR,
 	MALLOC_ERR,
 	READ_ERR,
-}	t_err;
+}					t_err;
 
-size_t	ft_strlen(char *s);
-char	*ft_strjoin(char *s1, char *s2, t_err *err);
-bool	is_line_complete(char *line);
+t_err				lst_add(int fd, t_buffer **lst);
+bool				is_line_complete(t_buffer *buffer);
+void				*lst_clear(t_buffer **lst);
+ssize_t				ft_calc_len(t_buffer *lst);
 
-char	*get_next_line(int fd);
+char				*get_next_line(int fd);
 
 #endif
